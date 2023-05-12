@@ -1,0 +1,39 @@
+server:
+  port: 7002
+
+spring:
+  datasource:
+    url: jdbc:h2:./src/main/resources/data-sources/MAIL_DB
+    driverClassName: org.h2.Driver
+    username: mailClientH2Db
+    password: m41lCl1€nt
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: update
+  servlet:
+    multipart:
+      max-file-size: 100GB
+      max-request-size: 100GB
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: [your_mail]
+    password: [your_mail_password]
+    protocol: smtp
+    tls: true
+    from: [your_mail]
+    properties.mail.smtp:
+      auth: true
+      starttls.enable: true
+      ssl.trust: smtp.gmail.com
+    scheduler: "*/120 * * * * *"
+mail:
+  mail-attempt: 3
+  timeout: 10000
+  shutdown-after-load: false
+  is-test-env: true
+  security:
+    cors:
+      allowed-hosts:
+        - /**

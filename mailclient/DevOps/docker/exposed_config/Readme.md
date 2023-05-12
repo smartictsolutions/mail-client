@@ -1,0 +1,1 @@
+Configuration file of the Mail Client App.

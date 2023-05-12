@@ -1,0 +1,31 @@
+version: '3.9'
+services:
+  mail-client:
+    container_name: mail-client-container
+    image: mail-client-image
+    ports:
+      - "7002:7002"
+    environment:
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USERNAME: maysapp22@gmail.com
+      MAIL_PASSWORD: agtu gnos jcyh athh
+      MAIL_PROTOCOL: smtp
+      MAIL_FROM: maysapp22@gmail.com
+      MAIL_IS_AUTH: "true"
+      MAIL_START_TLS_ENABLE: "true"
+      MAIL_SSL_TRUST: smtp.gmail.com
+    volumes:
+      - ./exposed_config/mail-client-config-base.yml:/config/mail-client-config.yml
+    networks:
+      mail-client-net:
+        ipv4_address: 152.24.0.2 
+
+networks:
+  mail-client-net:
+    name: mail-client-net
+    ipam:
+      driver: default
+      config:
+        - subnet: 152.24.0.0/16
+          gateway: 152.24.0.1
