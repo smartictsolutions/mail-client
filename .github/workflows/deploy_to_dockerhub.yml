@@ -42,5 +42,5 @@ jobs:
           docker tag smartictsolutions/mail-client-image:latest smartictsolutions/mailclient:${{ github.run_number }}
           docker tag smartictsolutions/mail-client-image:latest smartictsolutions/mailclient:latest
           docker image ls -a
-          docker push smartictsolutions/mail-client-image:${{ github.run_number }}
-          docker push smartictsolutions/mail-client-image:latest
+          docker push smartictsolutions/mailclient:${{ github.run_number }}
+          docker push smartictsolutions/mailclient:latest
