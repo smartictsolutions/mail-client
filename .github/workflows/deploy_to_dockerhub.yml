@@ -38,8 +38,8 @@ jobs:
         
       - name: Load image
         run: |
-          docker tag smartictsolutions/mailclient:latest smartictsolutions/mail-server:${{ github.run_number }}
-          docker tag smartictsolutions/mailclient:latest smartictsolutions/mail-server:latest
+          docker tag smartictsolutions/mail-client:latest smartictsolutions/mail-client:${{ github.run_number }}
+          docker tag smartictsolutions/mail-client:latest smartictsolutions/mail-client:latest
           docker image ls -a
-          docker push smartictsolutions/mail-server:${{ github.run_number }}
-          docker push smartictsolutions/mail-server:latest
+          docker push smartictsolutions/mail-client:${{ github.run_number }}
+          docker push smartictsolutions/mail-client:latest
