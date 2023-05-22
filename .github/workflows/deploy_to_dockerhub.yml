@@ -38,7 +38,6 @@ jobs:
         
       - name: Load image
         run: |
-          docker load --input ../../DevOps/config-server-app-image.tar
           docker tag smartictsolutions/mailclient:latest smartictsolutions/mail-server:${{ github.run_number }}
           docker tag smartictsolutions/mailclient:latest smartictsolutions/mail-server:latest
           docker image ls -a
