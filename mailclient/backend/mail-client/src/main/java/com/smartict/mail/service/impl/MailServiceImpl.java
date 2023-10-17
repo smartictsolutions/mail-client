@@ -3,9 +3,7 @@ package com.smartict.mail.service.impl;
 
 import java.io.*;
 import java.text.SimpleDateFormat;
-import java.util.List;
-import java.util.Objects;
-import java.util.Properties;
+import java.util.*;
 
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
@@ -16,8 +14,10 @@ import com.smartict.mail.constant.exceptions.ServiceException;
 import com.smartict.mail.constant.messages.EnumExceptionMessages;
 import com.smartict.mail.dto.MailDto;
 import com.smartict.mail.dto.MailLogDto;
+import com.smartict.mail.dto.MailSettingDto;
 import com.smartict.mail.service.MailLogService;
 import com.smartict.mail.service.MailService;
+import com.smartict.mail.service.MailSettingService;
 import com.smartict.mail.service.impl.mapper.MailLogMailDtoMapper;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -49,9 +49,9 @@ public class MailServiceImpl implements MailService {
 
     private static SimpleDateFormat simpleDateFormat = new SimpleDateFormat("yyyy-MM-dd");
 
-    private final JavaMailSender javaMailSender;
-
+    private JavaMailSender javaMailSender;
     private final MailLogService mailLogService;
+    private final MailSettingService mailSettingService;
 
     private final Integer mailAttempt;
     private final Integer timeout;
@@ -60,10 +60,12 @@ public class MailServiceImpl implements MailService {
     public MailServiceImpl(
         JavaMailSender javaMailSender,
         MailLogService mailLogService,
+        MailSettingService mailSettingService,
         @Value("${mail.mail-attempt}") Integer mailAttempt,
         @Value("${mail.timeout}") Integer timeout,
         @Value("${spring.mail.from}") String mailFromProperty
     ) {
+        this.mailSettingService = mailSettingService;
         LOGGER.info("this.mailFromProperty ", System.getenv("MAIL_FROM"));
         this.mailFromProperty = Objects.nonNull(System.getenv("MAIL_FROM")) ? System.getenv("MAIL_FROM") : mailFromProperty;
         this.timeout = Objects.nonNull(timeout) ? timeout : Integer.parseInt(System.getenv("MAIL_TIMEOUT"));
@@ -83,8 +85,10 @@ public class MailServiceImpl implements MailService {
     @Override
     public boolean sendMail(MailDto mailDto, MultipartFile multipartFile) {
         LOGGER.info("Mail isteği geldi -> To:" + mailDto.getTo() + "\nSubject:" + mailDto.getSubject() + "\nBody:" + mailDto.getBody());
+
         MailLogDto mailLogDto = MailLogMailDtoMapper.INSTANCE.mailDtoToMailLogDto(mailDto);
         mailLogDto.setAttemptLeft(this.mailAttempt);
+        mailLogDto.setAbbreviation("default");
 
         if (Objects.nonNull(multipartFile)) {
             mailLogDto.setAttachmentFileName(multipartFile.getOriginalFilename());
@@ -99,6 +103,70 @@ public class MailServiceImpl implements MailService {
         }
 
         return Objects.nonNull(mailLogService.create(mailLogDto));
+    }
+
+    /**
+     * Default kayıtlı mail ayarları dışında farklı bir mail ayarları kullanarak mail gönderme işlemi için kullanılır.
+     */
+
+    @Override
+    public boolean sendMailViaSettings(MailDto mailDto, MailSettingDto mailSettingDto, MultipartFile multipartFile) {
+        LOGGER.info("Mail isteği geldi -> To:" + mailDto.getTo() + "\nSubject:" + mailDto.getSubject() + "\nBody:" + mailDto.getBody());
+
+        MailSettingDto existSettingDto = mailSettingService.readByAbbreviation(mailSettingDto.getAbbreviation());
+
+        if (Objects.isNull(existSettingDto)) {
+            mailSettingService.create(mailSettingDto);
+        } else {
+            mailSettingDto.setId(existSettingDto.getId());
+            mailSettingService.update(mailSettingDto);
+        }
+
+        MailLogDto mailLogDto = MailLogMailDtoMapper.INSTANCE.mailDtoToMailLogDto(mailDto);
+        mailLogDto.setAttemptLeft(this.mailAttempt);
+        mailLogDto.setAbbreviation(mailSettingDto.getAbbreviation());
+
+        if (Objects.nonNull(multipartFile)) {
+            mailLogDto.setAttachmentFileName(multipartFile.getOriginalFilename());
+            try {
+                mailLogDto.setAttachment(multipartFile.getBytes());
+            } catch (IOException e) {
+                throw new ServiceException(
+                    EnumExceptionMessages.MAIL_ATTACHMENT_NOT_SUPPORT.getLanguageKey(),
+                    EnumExceptionMessages.MAIL_ATTACHMENT_NOT_SUPPORT.getLanguageValue()
+                );
+            }
+        }
+
+        return Objects.nonNull(mailLogService.create(mailLogDto));
+    }
+
+    private JavaMailSender getMailSenderViaExternalSettings(MailSettingDto mailSettingDto) {
+        JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
+
+        if (!Objects.isNull(mailSettingDto.getHost())) {
+            mailSender.setHost(mailSettingDto.getHost());
+        }
+
+        if (!Objects.isNull(mailSettingDto.getUsername())) {
+            mailSender.setUsername(mailSettingDto.getUsername());
+        }
+
+        if (!Objects.isNull(mailSettingDto.getPassword())) {
+            mailSender.setPassword(mailSettingDto.getPassword());
+        }
+
+        if (!Objects.isNull(mailSettingDto.getPort())) {
+            mailSender.setPort(mailSettingDto.getPort());
+        }
+
+        if (!Objects.isNull(mailSettingDto.getProtocol())) {
+            mailSender.setProtocol(mailSettingDto.getProtocol());
+        }
+
+        mailSender.setJavaMailProperties(configureJavaMailProp(mailSender, mailSettingDto));
+
+        return mailSender;
     }
 
     private JavaMailSender getMailSender(JavaMailSender javaMailSender) {
@@ -124,18 +192,27 @@ public class MailServiceImpl implements MailService {
             mailSender.setProtocol(System.getenv("MAIL_" + "protocol".toUpperCase()));
         }
 
-        mailSender.setJavaMailProperties(configureJavaMailProp(mailSender));
+        mailSender.setJavaMailProperties(configureJavaMailProp(mailSender, null));
 
         return mailSender;
     }
 
-    private Properties configureJavaMailProp(JavaMailSenderImpl mailSender) {
+    private Properties configureJavaMailProp(JavaMailSenderImpl mailSender, MailSettingDto mailSettingDto) {
         Properties mailProperties = mailSender.getJavaMailProperties();
 
-        readMailConfigValue(mailProperties, "mail.smtp.auth", "AUTH");
-        readMailConfigValue(mailProperties, "mail.smtp.starttls.enable", "START_TLS_ENABLE");
-        readMailConfigValue(mailProperties, "mail.smtp.ssl.trust", "SSL_TRUST");
-        mailProperties.put("mail.smtp.connectiontimeout", timeout);
+        if (Objects.isNull(mailSettingDto)) {
+            readMailConfigValue(mailProperties, "mail.smtp.auth", "AUTH");
+            readMailConfigValue(mailProperties, "mail.smtp.starttls.enable", "START_TLS_ENABLE");
+            readMailConfigValue(mailProperties, "mail.smtp.ssl.trust", "SSL_TRUST");
+            mailProperties.put("mail.smtp.connectiontimeout", timeout);
+        } else {
+            mailProperties.setProperty("mail." + mailSettingDto.getProtocol().toLowerCase() + ".auth", mailSettingDto.getAuth().toString());
+            //@formatter:off
+            mailProperties.setProperty("mail." + mailSettingDto.getProtocol().toLowerCase() + ".starttls.enable", mailSettingDto.getStartTlsEnable().toString());
+            mailProperties.setProperty("mail." + mailSettingDto.getProtocol().toLowerCase() + ".ssl.trust", mailSettingDto.getSslTrust());
+            mailProperties.put("mail." + mailSettingDto.getProtocol().toLowerCase() + ".connectiontimeout", timeout);
+        }
+
         try {
             LOGGER.info("Spring mail properties " + new ObjectMapper().writeValueAsString(mailProperties));
         } catch (JsonProcessingException e) {
@@ -170,19 +247,37 @@ public class MailServiceImpl implements MailService {
         LOGGER.info("Mail zamanlayıcı başladı...");
         List<MailLogDto> mailLogDtos = mailLogService.readAll();
         LOGGER.info("İşleme konulan mail sayısı: " + mailLogDtos.size());
+
         int logCounter = 1;
         int doneMailCounter = 0;
+
         for (MailLogDto mailLogDto : mailLogDtos) {
+            JavaMailSender javaMailSender;
+
+            MailSettingDto settingDto = mailSettingService.readByAbbreviation(mailLogDto.getAbbreviation());
+
+            if (Objects.nonNull(settingDto)) {
+                javaMailSender = getMailSenderViaExternalSettings(settingDto);
+            } else {
+                javaMailSender = this.javaMailSender;
+            }
+
             MimeMessage mimeMessage = javaMailSender.createMimeMessage();
             LOGGER.info("Mail gönderililiyor..." + "[" + (logCounter) + "/" + mailLogDtos.size() + "]");
 
             try {
                 MimeMessageHelper message = new MimeMessageHelper(mimeMessage, true, UTF_8);
 
-                LOGGER.info(this.mailFromProperty);
-                if (Objects.nonNull(this.mailFromProperty)) {
-                    message.setFrom(this.mailFromProperty);
+                if (Objects.nonNull(settingDto)) {
+                    LOGGER.info("from: " + settingDto.getFromAddress());
+                    message.setFrom(settingDto.getFromAddress());
+                }else{
+                    LOGGER.info("from: " + this.mailFromProperty);
+                    if (Objects.nonNull(this.mailFromProperty)) {
+                        message.setFrom(this.mailFromProperty);
+                    }
                 }
+
                 message.setTo(mailLogDto.getTo().split(","));
 
                 LOGGER.info("isHtml " + mailLogDto.getIsHtml());
@@ -232,6 +327,7 @@ public class MailServiceImpl implements MailService {
                     }
 
                 }
+
                 LOGGER.info(
                     "\n Gönderen hesap: " +
                             ((JavaMailSenderImpl) javaMailSender).getUsername() +

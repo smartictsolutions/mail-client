@@ -54,4 +54,7 @@ public class MailLog implements Serializable {
     @Column(name = "is_html")
     private Boolean isHtml;
 
+    @Column(name = "abbreviation")
+    private String abbreviation;
+
 }
