@@ -33,4 +33,6 @@ public class MailLogDto implements Serializable {
     private byte[] attachment;
 
     private String attachmentFileName;
+
+    private String abbreviation;
 }
